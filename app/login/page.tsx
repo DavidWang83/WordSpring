@@ -1,0 +1,72 @@
+// app/login/page.tsx
+"use client";
+
+import { useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+
+export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+      },
+    });
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      setSent(true);
+    }
+  }
+
+  return (
+    <main style={styles.body}>
+      <div style={styles.card}>
+        <div style={styles.eyebrow}>WordSpring</div>
+        <h1 style={styles.h1}>Sign in</h1>
+        {sent ? (
+          <p style={styles.p}>
+            Check your inbox — we sent a sign-in link to <b>{email}</b>. Click it to continue.
+          </p>
+        ) : (
+          <form onSubmit={handleLogin}>
+            <label style={styles.label}>Email address</label>
+            <input
+              style={styles.input}
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
+            <button style={styles.btn} type="submit" disabled={loading}>
+              {loading ? "Sending…" : "Send sign-in link"}
+            </button>
+            {error && <div style={styles.error}>{error}</div>}
+          </form>
+        )}
+      </div>
+    </main>
+  );
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  body: { background: "#1C2333", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "sans-serif" },
+  card: { background: "#262E44", border: "1px solid rgba(154,166,190,0.18)", borderRadius: 14, padding: 32, maxWidth: 380, width: "100%" },
+  eyebrow: { fontSize: 12, letterSpacing: "0.28em", color: "#7C8BA3", textTransform: "uppercase", marginBottom: 10 },
+  h1: { fontWeight: 700, fontSize: 26, margin: "0 0 20px", color: "#E9E5D8" },
+  label: { display: "block", fontSize: 12, color: "#9AA6BE", marginBottom: 6 },
+  input: { width: "100%", background: "#1C2333", color: "#E9E5D8", border: "1px solid rgba(154,166,190,0.3)", borderRadius: 8, padding: "10px 12px", fontSize: 14, marginBottom: 16, boxSizing: "border-box" },
+  btn: { width: "100%", background: "#B33A3A", color: "#E9E5D8", border: "none", borderRadius: 10, padding: 13, fontSize: 15, fontWeight: 600, cursor: "pointer" },
+  error: { color: "#F1C9C9", fontSize: 13, marginTop: 12 },
+  p: { color: "#E9E5D8", fontSize: 14, lineHeight: 1.7 },
+};
