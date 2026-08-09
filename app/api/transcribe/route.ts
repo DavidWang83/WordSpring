@@ -1,8 +1,14 @@
 // app/api/transcribe/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthedUser } from "../../lib/verifyAuth";
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getAuthedUser(req);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first" }, { status: 401 });
+    }
+
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File | null;
     const language = (formData.get("language") as string) || undefined; // Whisper ISO-639-1 code, e.g. "en", "ja"

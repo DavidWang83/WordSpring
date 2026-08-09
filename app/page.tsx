@@ -143,10 +143,23 @@ export default function Home() {
     setTranscribing(true);
     setError("");
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setError("Your session has expired. Please sign in again.");
+        router.push("/login");
+        return;
+      }
+
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
       formData.append("language", getWhisperCode(sttLang));
-      const res = await fetch("/api/transcribe", { method: "POST", body: formData });
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Speech recognition failed");
       setTranscript((prev) => (prev ? prev + " " + data.text : data.text));
@@ -167,9 +180,21 @@ export default function Home() {
     setVersions(null);
     setChosenIdx(null);
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setError("Your session has expired. Please sign in again.");
+        router.push("/login");
+        return;
+      }
+
       const res = await fetch("/api/generate-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ content: transcript, outLang, sttLang }),
       });
       const data = await res.json();

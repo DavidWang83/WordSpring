@@ -1,11 +1,17 @@
 // app/api/generate-email/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getPromptLabel } from "../../lib/languages";
+import { getAuthedUser } from "../../lib/verifyAuth";
 
 const TONE_LEVELS = ["Warm & Courteous", "Neutral & Professional", "Direct & Concise"];
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getAuthedUser(req);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first" }, { status: 401 });
+    }
+
     const { content, outLang, sttLang } = await req.json();
 
     if (!content || typeof content !== "string" || !content.trim()) {
