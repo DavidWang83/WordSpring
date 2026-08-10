@@ -30,7 +30,7 @@ export default function Home() {
   // Composer state
   const [composerSubject, setComposerSubject] = useState("");
   const [fontFamily, setFontFamily] = useState("Arial, sans-serif");
-  const [fontSizePt, setFontSizePt] = useState(14); // whole-email default size, remembered as a user preference
+  const [fontSizePt, setFontSizePt] = useState(10); // whole-email default size, remembered as a user preference
   const bodyRef = useRef<HTMLDivElement>(null);
   const composerAnchorRef = useRef<HTMLDivElement>(null);
 
@@ -243,6 +243,25 @@ export default function Home() {
     applyFormat("foreColor", hex);
   }
 
+  // Applies a specific pt size to only the currently selected text, independent
+  // of the whole-email font size above. The browser's execCommand("fontSize", ...)
+  // only supports the old HTML size scale (1-7), not arbitrary pt values, so we
+  // use it to tag the selection, then swap that tag for a <span> with the exact
+  // pt size we actually want.
+  function applySelectionFontSize(pt: number) {
+    bodyRef.current?.focus();
+    document.execCommand("fontSize", false, "7");
+    if (bodyRef.current) {
+      const tagged = bodyRef.current.querySelectorAll('font[size="7"]');
+      tagged.forEach((el) => {
+        const span = document.createElement("span");
+        span.style.fontSize = `${pt}pt`;
+        span.innerHTML = el.innerHTML;
+        el.replaceWith(span);
+      });
+    }
+  }
+
   function insertSignature() {
     const sig = signatures.find((s) => s.id === selectedSigId);
     if (!sig || !bodyRef.current) return;
@@ -439,40 +458,63 @@ export default function Home() {
               />
             </div>
 
-            <div style={styles.toolbar}>
-              <select style={styles.toolbarSelect} value={fontFamily} onChange={(e) => updateFontFamily(e.target.value)} title="Font (applies to the whole email, remembered as your default)">
-                <option value="Arial, sans-serif">Arial</option>
-                <option value="Georgia, serif">Georgia</option>
-                <option value="'Courier New', monospace">Courier New</option>
-                <option value="'Times New Roman', serif">Times New Roman</option>
-                <option value="Verdana, sans-serif">Verdana</option>
-              </select>
-              <select
-                style={styles.toolbarSelect}
-                value={fontSizePt}
-                onChange={(e) => updateFontSizePt(Number(e.target.value))}
-                title="Font size in pt (applies to the whole email, remembered as your default)"
-              >
-                {[10, 11, 12, 14, 16, 18, 20, 24].map((pt) => (
-                  <option key={pt} value={pt}>{pt}pt</option>
-                ))}
-              </select>
-              <button style={styles.toolbarBtn} onClick={() => applyFormat("bold")} title="Bold selected text"><b>B</b></button>
-              <button style={styles.toolbarBtn} onClick={() => applyFormat("italic")} title="Italicize selected text"><i>I</i></button>
-              <button style={styles.toolbarBtn} onClick={() => applyFormat("underline")} title="Underline selected text"><u>U</u></button>
-              <label style={styles.colorSwatch} title="Text color for selected text">
-                <span style={{ fontSize: 12 }}>A</span>
-                <input
-                  type="color"
-                  defaultValue="#2A2620"
-                  onChange={(e) => applyColor(e.target.value)}
-                  style={styles.colorInput}
-                />
-              </label>
+            <div style={styles.toolbarGroup}>
+              <div style={styles.toolbarGroupLabel}>✉ Whole email (applies to everything, remembered as default)</div>
+              <div style={styles.toolbar}>
+                <select style={styles.toolbarSelect} value={fontFamily} onChange={(e) => updateFontFamily(e.target.value)} title="Font (applies to the whole email, remembered as your default)">
+                  <option value="Arial, sans-serif">Arial</option>
+                  <option value="Georgia, serif">Georgia</option>
+                  <option value="'Courier New', monospace">Courier New</option>
+                  <option value="'Times New Roman', serif">Times New Roman</option>
+                  <option value="Verdana, sans-serif">Verdana</option>
+                </select>
+                <select
+                  style={styles.toolbarSelect}
+                  value={fontSizePt}
+                  onChange={(e) => updateFontSizePt(Number(e.target.value))}
+                  title="Font size in pt (applies to the whole email, remembered as your default)"
+                >
+                  {[8, 10, 11, 12, 14, 16, 18, 20, 24].map((pt) => (
+                    <option key={pt} value={pt}>{pt}pt</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={styles.toolbarGroupAlt}>
+              <div style={styles.toolbarGroupLabel}>🖊 Selected text only</div>
+              <div style={styles.toolbar}>
+                <select
+                  style={styles.toolbarSelect}
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (e.target.value) applySelectionFontSize(Number(e.target.value));
+                    e.target.value = "";
+                  }}
+                  title="Font size for the highlighted text only (does not change the rest of the email)"
+                >
+                  <option value="" disabled>Size…</option>
+                  {[8, 10, 11, 12, 14, 16, 18, 20, 24].map((pt) => (
+                    <option key={pt} value={pt}>{pt}pt</option>
+                  ))}
+                </select>
+                <button style={styles.toolbarBtn} onClick={() => applyFormat("bold")} title="Bold selected text"><b>B</b></button>
+                <button style={styles.toolbarBtn} onClick={() => applyFormat("italic")} title="Italicize selected text"><i>I</i></button>
+                <button style={styles.toolbarBtn} onClick={() => applyFormat("underline")} title="Underline selected text"><u>U</u></button>
+                <label style={styles.colorSwatch} title="Text color for selected text">
+                  <span style={{ fontSize: 12 }}>A</span>
+                  <input
+                    type="color"
+                    defaultValue="#2A2620"
+                    onChange={(e) => applyColor(e.target.value)}
+                    style={styles.colorInput}
+                  />
+                </label>
+              </div>
             </div>
             <div style={styles.notice}>
-              Font and size apply to the whole email and are remembered as your default next time. Bold, italic,
-              underline, and color apply to selected text only.
+              ✉ Font and size on the left apply to the whole email and are remembered as your default next time.
+              🖊 Everything on the right — size, bold, italic, underline, color — only affects text you've highlighted.
             </div>
 
             <div
@@ -580,6 +622,9 @@ const styles: Record<string, React.CSSProperties> = {
   copyBtnSmall: { background: "none", border: "1px solid #2A2620", color: "#2A2620", borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer" },
   sealStamp: { width: 40, height: 40, borderRadius: "50%", border: "2px solid #B33A3A", cursor: "pointer", fontWeight: 700, fontSize: 15, flexShrink: 0 },
   toolbar: { display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" },
+  toolbarGroup: { background: "rgba(154,166,190,0.08)", border: "1px solid rgba(154,166,190,0.25)", borderRadius: 8, padding: "10px 12px", marginBottom: 8 },
+  toolbarGroupAlt: { background: "rgba(179,58,58,0.08)", border: "1px solid rgba(179,58,58,0.3)", borderRadius: 8, padding: "10px 12px", marginBottom: 8 },
+  toolbarGroupLabel: { fontSize: 11, letterSpacing: "0.04em", color: "#9AA6BE", marginBottom: 8, fontWeight: 600 },
   toolbarSelect: { background: "#1C2333", color: "#E9E5D8", border: "1px solid rgba(154,166,190,0.3)", borderRadius: 8, padding: "6px 10px", fontSize: 13 },
   toolbarBtn: { background: "#1C2333", color: "#E9E5D8", border: "1px solid rgba(154,166,190,0.3)", borderRadius: 8, padding: "6px 14px", fontSize: 13, cursor: "pointer" },
   colorSwatch: { display: "flex", alignItems: "center", gap: 6, background: "#1C2333", color: "#E9E5D8", border: "1px solid rgba(154,166,190,0.3)", borderRadius: 8, padding: "6px 10px", fontSize: 13, cursor: "pointer" },
