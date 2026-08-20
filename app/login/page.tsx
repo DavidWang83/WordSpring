@@ -36,7 +36,7 @@ export default function LoginPage() {
   return (
     <main style={styles.body}>
       <div style={styles.card}>
-        <div style={styles.eyebrow}>WordSpring</div>
+        <div style={styles.eyebrow}>Word Spring</div>
         <h1 style={styles.h1}>Sign in</h1>
         {sent ? (
           <p style={styles.p}>
@@ -64,10 +64,14 @@ export default function LoginPage() {
                 I agree to the{" "}
                 <a href="/terms" target="_blank" rel="noopener noreferrer" style={styles.link}>
                   Terms of Service
-                </a>{" "}
-                and{" "}
+                </a>
+                ,{" "}
                 <a href="/privacy" target="_blank" rel="noopener noreferrer" style={styles.link}>
                   Privacy Policy
+                </a>
+                , and{" "}
+                <a href="/usage-policy" target="_blank" rel="noopener noreferrer" style={styles.link}>
+                  Usage Policy
                 </a>
                 .
               </span>
@@ -81,7 +85,7 @@ export default function LoginPage() {
       </div>
 
       <p style={styles.blurb}>
-        WordSpring turns what you say out loud into a polished, formal email — dictate your message, pick a
+        Word Spring turns what you say out loud into a polished, formal email — dictate your message, pick a
         language and tone, and get a ready-to-send draft in seconds. No password to remember: we email you a
         one-time sign-in link instead.
       </p>

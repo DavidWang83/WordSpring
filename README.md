@@ -1,4 +1,4 @@
-# voice-email-app (WordSpring)
+# voice-email-app (Word Spring)
 
 口述內容 → 自動轉換成多語言、多語氣的商務書信，支援登入後雲端同步簽名檔與字型偏好。
 

@@ -10,6 +10,29 @@ import type { User } from "@supabase/supabase-js";
 type LetterVersion = { tone: string; subject: string; body: string; translation?: string };
 type Signature = { id: string; name: string; text: string };
 
+const TOUR_SEEN_KEY = "wordspring_tour_seen";
+
+const TOUR_MOCK_TRANSCRIPT =
+  "Hey I need to email Sarah about pushing our meeting from Thursday to next Monday because I have a conflict, and let her know I'm still excited to go over the Q3 numbers together.";
+
+const TOUR_MOCK_VERSIONS: LetterVersion[] = [
+  {
+    tone: "Warm & Courteous",
+    subject: "Quick reschedule request — Thursday meeting",
+    body: "Hi Sarah,\n\nI hope you're doing well! A conflict has come up for Thursday, and I was hoping we could push our meeting to next Monday instead.\n\nI'm still really looking forward to going over the Q3 numbers together — thank you so much for your flexibility.\n\nLet me know if Monday works on your end!\n\nBest,\n[Your name]",
+  },
+  {
+    tone: "Neutral & Professional",
+    subject: "Rescheduling our Thursday meeting",
+    body: "Hi Sarah,\n\nA scheduling conflict has come up for Thursday. Could we move our meeting to next Monday instead?\n\nI'm looking forward to reviewing the Q3 numbers together and appreciate your understanding.\n\nPlease let me know if Monday works for you.\n\nBest regards,\n[Your name]",
+  },
+  {
+    tone: "Direct & Concise",
+    subject: "Move Thursday meeting to Monday?",
+    body: "Hi Sarah,\n\nConflict on Thursday — can we shift to Monday instead?\n\nStill keen to go over Q3 numbers. Let me know if that works.\n\n[Your name]",
+  },
+];
+
 
 export default function Home() {
   const router = useRouter();
@@ -44,6 +67,135 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
+  // Product tour: state + refs pointing at the real on-screen elements it highlights
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const [tourRect, setTourRect] = useState<DOMRect | null>(null);
+  const langRowRef = useRef<HTMLDivElement>(null);
+  const micBtnRef = useRef<HTMLButtonElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const generateBtnRef = useRef<HTMLButtonElement>(null);
+  const resultsPanelRef = useRef<HTMLDivElement>(null);
+  const copyRowRef = useRef<HTMLDivElement>(null);
+  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const TOUR_STEPS = [
+    { ref: langRowRef, title: "1. Pick your languages", body: "Choose the language you'll speak in, and the language your email should come out in — they don't have to match." },
+    { ref: micBtnRef, title: "2. Press record", body: "Tap the mic and just talk — say what you want the email to communicate, in your own words. No need to sound formal." },
+    { ref: textareaRef, title: "3. Review what was heard", body: "Your words are transcribed here automatically. You can edit the text directly before generating — nothing is final yet." },
+    { ref: generateBtnRef, title: "4. Generate three tones", body: "Get three ready-to-send drafts — from warm and courteous to short and direct — generated in seconds." },
+    { ref: resultsPanelRef, title: "5. Pick a tone", body: "Preview each version, then tap the checkmark on the one you like to open it in the editor below." },
+    { ref: copyRowRef, title: "6. Fine-tune & copy", body: "Adjust font/formatting, insert a saved signature, then copy the subject and body separately — ready to paste into any email app." },
+    { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, generate, pick a tone, and copy. Try it for real now." },
+  ] as const;
+
+  function runTourTypingAnimation() {
+    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+    let i = 0;
+    setTranscript("");
+    typingIntervalRef.current = setInterval(() => {
+      i += 3;
+      setTranscript(TOUR_MOCK_TRANSCRIPT.slice(0, i));
+      if (i >= TOUR_MOCK_TRANSCRIPT.length) {
+        if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+      }
+    }, 25);
+  }
+
+  function startTour() {
+    setError("");
+    setTranscript("");
+    setVersions(null);
+    setChosenIdx(null);
+    setRecording(false);
+    setGenerating(false);
+    setSttLang("en");
+    setOutLang("en");
+    setTourStep(0);
+  }
+
+  function advanceTour() {
+    const next = (tourStep ?? 0) + 1;
+    if (next === 2) {
+      // Leaving the "press record" step: turn the mic visual off and simulate the transcription arriving
+      setRecording(false);
+      runTourTypingAnimation();
+    } else if (next === 3) {
+      // Make sure the full transcript is in place before pointing at the Generate button
+      if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+      setTranscript(TOUR_MOCK_TRANSCRIPT);
+    } else if (next === 4) {
+      // Simulate the "Generating…" moment, then reveal the three tone options
+      setGenerating(true);
+      setTimeout(() => {
+        setGenerating(false);
+        setVersions(TOUR_MOCK_VERSIONS);
+      }, 700);
+    } else if (next === 5) {
+      // Simulate picking the "Neutral & Professional" version and opening the editor
+      setChosenIdx(1);
+      setComposerSubject(TOUR_MOCK_VERSIONS[1].subject);
+      setTimeout(() => {
+        if (bodyRef.current) bodyRef.current.innerText = TOUR_MOCK_VERSIONS[1].body;
+      }, 60);
+    }
+    setTourStep(next);
+  }
+
+  function endTour() {
+    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+    setTourStep(null);
+    setTranscript("");
+    setVersions(null);
+    setChosenIdx(null);
+    setRecording(false);
+    setGenerating(false);
+    setSttLang("en");
+    setOutLang("ja");
+    if (typeof window !== "undefined") localStorage.setItem(TOUR_SEEN_KEY, "1");
+  }
+
+  // Keep the highlighted spotlight positioned over the right element as the tour advances
+  useEffect(() => {
+    if (tourStep === null) return;
+    let raf: number;
+    let tries = 0;
+    function tick() {
+      const stepDef = TOUR_STEPS[tourStep as number];
+      if (!stepDef?.ref) {
+        setTourRect(null);
+        return;
+      }
+      const target = stepDef.ref.current;
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTourRect(target.getBoundingClientRect());
+      } else if (tries < 40) {
+        tries++;
+        raf = requestAnimationFrame(tick);
+      } else {
+        setTourRect(null);
+      }
+    }
+    tick();
+    function onReposition() {
+      const target = TOUR_STEPS[tourStep as number]?.ref?.current;
+      if (target) setTourRect(target.getBoundingClientRect());
+    }
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourStep, versions, chosenIdx]);
+
+  // Trigger the mic "press" visual right when step 1 becomes active
+  useEffect(() => {
+    if (tourStep === 1) setRecording(true);
+  }, [tourStep]);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
@@ -53,6 +205,9 @@ export default function Home() {
       setUser(session.user);
       setAuthLoading(false);
       loadUserData(session.user.id);
+      if (typeof window !== "undefined" && !localStorage.getItem(TOUR_SEEN_KEY)) {
+        setTimeout(() => startTour(), 400);
+      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -327,8 +482,8 @@ export default function Home() {
       <div style={styles.wrap}>
         <header style={{ marginBottom: 36, display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
           <div>
-            <div style={styles.eyebrow}>WordSpring</div>
-            <h1 style={styles.h1}>WordSpring</h1>
+            <div style={styles.eyebrow}>Word Spring</div>
+            <h1 style={styles.h1}>Word Spring</h1>
             <p style={styles.headerP}>
               Press record and simply say what you want to communicate. AI will turn it into a
               formal email, with several tones for you to choose from and edit.
@@ -336,7 +491,10 @@ export default function Home() {
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ color: "#9AA6BE", fontSize: 13, marginBottom: 6 }}>{user?.email}</div>
-            <button style={styles.copyBtnSmall} onClick={handleSignOut}>Sign out</button>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button style={styles.copyBtnSmall} onClick={startTour}>❔ How it works</button>
+              <button style={styles.copyBtnSmall} onClick={handleSignOut}>Sign out</button>
+            </div>
           </div>
         </header>
 
@@ -345,7 +503,7 @@ export default function Home() {
             <span style={styles.num}>1</span>Say what you want to write
           </h2>
 
-          <div style={styles.row}>
+          <div style={styles.row} ref={langRowRef}>
             <div style={styles.field}>
               <label style={styles.label}>What language will you dictate in?</label>
               <select style={styles.select} value={sttLang} onChange={(e) => setSttLang(e.target.value)}>
@@ -366,6 +524,7 @@ export default function Home() {
 
           <div style={styles.recordArea}>
             <button
+              ref={micBtnRef}
               style={{ ...styles.micBtn, background: recording ? "#8E2C2C" : "#B33A3A" }}
               onClick={recording ? stopRecording : startRecording}
               aria-label={recording ? "Stop recording" : "Start recording"}
@@ -381,13 +540,14 @@ export default function Home() {
           </div>
 
           <textarea
+            ref={textareaRef}
             style={styles.textarea}
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="Your dictated content will appear here. You can also type directly, or paste in a related email thread for context."
           />
 
-          <button style={styles.generateBtn} onClick={handleGenerate} disabled={generating}>
+          <button ref={generateBtnRef} style={styles.generateBtn} onClick={handleGenerate} disabled={generating}>
             {generating ? "Generating…" : "Generate three tone options"}
           </button>
 
@@ -395,7 +555,7 @@ export default function Home() {
         </div>
 
         {versions && (
-          <div style={styles.panel}>
+          <div style={styles.panel} ref={resultsPanelRef}>
             <h2 style={styles.panelH2}>
               <span style={styles.num}>2</span>Choose the version you want to use
             </h2>
@@ -569,7 +729,7 @@ export default function Home() {
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }} ref={copyRowRef}>
               <button style={{ ...styles.generateBtn, flex: 1 }} onClick={copyComposerSubject}>
                 {copiedTag === "composer-subject" ? "Copied" : "Copy subject"}
               </button>
@@ -584,7 +744,114 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {tourStep !== null && (
+        <TourOverlay
+          step={tourStep}
+          totalSteps={TOUR_STEPS.length}
+          stepInfo={TOUR_STEPS[tourStep]}
+          rect={tourRect}
+          onNext={tourStep === TOUR_STEPS.length - 1 ? endTour : advanceTour}
+          onSkip={endTour}
+          isLast={tourStep === TOUR_STEPS.length - 1}
+        />
+      )}
     </main>
+  );
+}
+
+function TourOverlay({
+  step,
+  totalSteps,
+  stepInfo,
+  rect,
+  onNext,
+  onSkip,
+  isLast,
+}: {
+  step: number;
+  totalSteps: number;
+  stepInfo: { title: string; body: string };
+  rect: DOMRect | null;
+  onNext: () => void;
+  onSkip: () => void;
+  isLast: boolean;
+}) {
+  const pad = 10;
+  // Centered card for the final step (no element to spotlight); otherwise a tooltip
+  // pinned just below (or above, if there's no room) the highlighted element.
+  const tooltipTop = rect
+    ? rect.bottom + pad + 14 + window.scrollY > window.innerHeight + window.scrollY - 220
+      ? Math.max(16 + window.scrollY, rect.top + window.scrollY - 190)
+      : rect.bottom + window.scrollY + 18
+    : undefined;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000 }}>
+      {rect ? (
+        <div
+          style={{
+            position: "absolute",
+            top: rect.top - pad,
+            left: rect.left - pad,
+            width: rect.width + pad * 2,
+            height: rect.height + pad * 2,
+            borderRadius: 12,
+            boxShadow: "0 0 0 9999px rgba(10,12,20,0.78)",
+            border: "2px solid #B33A3A",
+            transition: "all 0.25s ease",
+            pointerEvents: "none",
+          }}
+        />
+      ) : (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(10,12,20,0.78)" }} />
+      )}
+
+      <div
+        style={{
+          position: rect ? "absolute" : "fixed",
+          top: rect ? tooltipTop : "50%",
+          left: rect ? Math.min(Math.max(16, rect.left), window.innerWidth - 336) : "50%",
+          transform: rect ? undefined : "translate(-50%, -50%)",
+          width: 320,
+          background: "#262E44",
+          border: "1px solid rgba(154,166,190,0.3)",
+          borderRadius: 12,
+          padding: 20,
+          boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
+          color: "#E9E5D8",
+        }}
+      >
+        <div style={{ fontSize: 11, color: "#9AA6BE", marginBottom: 8 }}>
+          Step {step + 1} of {totalSteps}
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{stepInfo.title}</div>
+        <div style={{ fontSize: 13, color: "#C4CADA", lineHeight: 1.6, marginBottom: 16 }}>{stepInfo.body}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button
+            onClick={onSkip}
+            style={{ background: "none", border: "none", color: "#9AA6BE", fontSize: 12, cursor: "pointer" }}
+          >
+            Skip tour
+          </button>
+          <button
+            onClick={onNext}
+            style={{
+              background: "#B33A3A",
+              color: "#E9E5D8",
+              border: "none",
+              borderRadius: 8,
+              padding: "9px 18px",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {isLast ? "Get started" : "Next"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
