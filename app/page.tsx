@@ -84,8 +84,9 @@ export default function Home() {
     { ref: textareaRef, title: "3. Review what was heard", body: "Your words are transcribed here automatically. You can edit the text directly before generating — nothing is final yet." },
     { ref: generateBtnRef, title: "4. Generate three tones", body: "Get three ready-to-send drafts — from warm and courteous to short and direct — generated in seconds." },
     { ref: resultsPanelRef, title: "5. Pick a tone", body: "Preview each version, then tap the checkmark on the one you like to open it in the editor below." },
-    { ref: copyRowRef, title: "6. Fine-tune & copy", body: "Adjust font/formatting, insert a saved signature, then copy the subject and body separately — ready to paste into any email app." },
-    { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, generate, pick a tone, and copy. Try it for real now." },
+    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it." },
+    { ref: copyRowRef, title: "7. Copy subject & body", body: "Copy the subject and body separately, ready to paste into any email app — this also works well on mobile, where copying happens in two steps." },
+    { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, generate, pick a tone, edit, and copy. Try it for real now." },
   ] as const;
 
   function runTourTypingAnimation() {
@@ -778,13 +779,27 @@ function TourOverlay({
   isLast: boolean;
 }) {
   const pad = 10;
-  // Centered card for the final step (no element to spotlight); otherwise a tooltip
-  // pinned just below (or above, if there's no room) the highlighted element.
-  const tooltipTop = rect
-    ? rect.bottom + pad + 14 + window.scrollY > window.innerHeight + window.scrollY - 220
-      ? Math.max(16 + window.scrollY, rect.top + window.scrollY - 190)
-      : rect.bottom + window.scrollY + 18
-    : undefined;
+  const cardHeight = 190;
+  const cardWidth = 320;
+  const viewportH = typeof window !== "undefined" ? window.innerHeight : 800;
+  const viewportW = typeof window !== "undefined" ? window.innerWidth : 400;
+
+  // Everything here is positioned inside a `position: fixed` full-viewport layer,
+  // so all coordinates must stay viewport-relative — never mix in window.scrollY/X,
+  // or the tooltip drifts off-screen the moment the page has been scrolled (which
+  // happens on every step, since each step auto-scrolls its target into view).
+  let tooltipTop: number | string = "50%";
+  let tooltipLeft: number | string = "50%";
+  if (rect) {
+    const spaceBelow = viewportH - rect.bottom;
+    tooltipTop =
+      spaceBelow > cardHeight + pad + 14
+        ? rect.bottom + pad + 14
+        : rect.top - cardHeight - 14;
+    // Always keep the card fully on-screen, even if the target sits right at an edge
+    tooltipTop = Math.min(Math.max(tooltipTop, 16), viewportH - cardHeight - 16);
+    tooltipLeft = Math.min(Math.max(rect.left, 16), viewportW - cardWidth - 16);
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000 }}>
@@ -810,10 +825,10 @@ function TourOverlay({
       <div
         style={{
           position: rect ? "absolute" : "fixed",
-          top: rect ? tooltipTop : "50%",
-          left: rect ? Math.min(Math.max(16, rect.left), window.innerWidth - 336) : "50%",
+          top: tooltipTop,
+          left: tooltipLeft,
           transform: rect ? undefined : "translate(-50%, -50%)",
-          width: 320,
+          width: cardWidth,
           background: "#262E44",
           border: "1px solid rgba(154,166,190,0.3)",
           borderRadius: 12,

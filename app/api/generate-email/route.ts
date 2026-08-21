@@ -43,12 +43,16 @@ ${
     : `Do not include a "translation" field, since the output language matches the language the user dictated in.`
 }
 
+IMPORTANT: Both the "subject" and "body" fields must be written ENTIRELY in ${outLangName} — do not leave any word, phrase, or the whole subject line in ${spokenLangName || "the original dictated language"}.${
+  needsTranslation ? ` The ONLY field that should be in ${spokenLangName} is "translation".` : ""
+}
+
 Return ONLY valid JSON, no preamble, no markdown code fences, in this exact shape:
 {
   "versions": [
-    {"tone": "${TONE_LEVELS[0]}", "subject": "email subject line", "body": "full email body"${needsTranslation ? `, "translation": "translation of the body"` : ""}},
-    {"tone": "${TONE_LEVELS[1]}", "subject": "email subject line", "body": "full email body"${needsTranslation ? `, "translation": "translation of the body"` : ""}},
-    {"tone": "${TONE_LEVELS[2]}", "subject": "email subject line", "body": "full email body"${needsTranslation ? `, "translation": "translation of the body"` : ""}}
+    {"tone": "${TONE_LEVELS[0]}", "subject": "email subject line, in ${outLangName}", "body": "full email body, in ${outLangName}"${needsTranslation ? `, "translation": "${spokenLangName} translation of the body"` : ""}},
+    {"tone": "${TONE_LEVELS[1]}", "subject": "email subject line, in ${outLangName}", "body": "full email body, in ${outLangName}"${needsTranslation ? `, "translation": "${spokenLangName} translation of the body"` : ""}},
+    {"tone": "${TONE_LEVELS[2]}", "subject": "email subject line, in ${outLangName}", "body": "full email body, in ${outLangName}"${needsTranslation ? `, "translation": "${spokenLangName} translation of the body"` : ""}}
   ]
 }`;
 
