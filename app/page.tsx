@@ -78,16 +78,23 @@ export default function Home() {
   const copyRowRef = useRef<HTMLDivElement>(null);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const TOUR_STEPS = [
+  type TourStepDef = {
+    ref: React.RefObject<HTMLElement> | null;
+    title: string;
+    body: string;
+    dock?: "bottom";
+  };
+
+  const TOUR_STEPS: TourStepDef[] = [
     { ref: langRowRef, title: "1. Pick your languages", body: "Choose the language you'll speak in, and the language your email should come out in — they don't have to match." },
     { ref: micBtnRef, title: "2. Press record", body: "Tap the mic and just talk — say what you want the email to communicate, in your own words. No need to sound formal." },
     { ref: textareaRef, title: "3. Review what was heard", body: "Your words are transcribed here automatically. You can edit the text directly before generating — nothing is final yet." },
     { ref: generateBtnRef, title: "4. Generate three tones", body: "Get three ready-to-send drafts — from warm and courteous to short and direct — generated in seconds." },
-    { ref: resultsPanelRef, title: "5. Pick a tone", body: "Preview each version, then tap the checkmark on the one you like to open it in the editor below." },
-    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it." },
+    { ref: resultsPanelRef, title: "5. Pick a tone", body: "Preview each version, then tap the checkmark on the one you like to open it in the editor below.", dock: "bottom" },
+    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it.", dock: "bottom" },
     { ref: copyRowRef, title: "7. Copy subject & body", body: "Copy the subject and body separately, ready to paste into any email app — this also works well on mobile, where copying happens in two steps." },
     { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, generate, pick a tone, edit, and copy. Try it for real now." },
-  ] as const;
+  ];
 
   function runTourTypingAnimation() {
     if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
@@ -125,12 +132,9 @@ export default function Home() {
       if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
       setTranscript(TOUR_MOCK_TRANSCRIPT);
     } else if (next === 4) {
-      // Simulate the "Generating…" moment, then reveal the three tone options
-      setGenerating(true);
-      setTimeout(() => {
-        setGenerating(false);
-        setVersions(TOUR_MOCK_VERSIONS);
-      }, 700);
+      // Skip the fake "Generating…" delay — jump straight to the results so the
+      // tour keeps moving smoothly instead of pausing on a spinner.
+      setVersions(TOUR_MOCK_VERSIONS);
     } else if (next === 5) {
       // Simulate picking the "Neutral & Professional" version and opening the editor
       setChosenIdx(1);
@@ -772,7 +776,7 @@ function TourOverlay({
 }: {
   step: number;
   totalSteps: number;
-  stepInfo: { title: string; body: string };
+  stepInfo: { title: string; body: string; dock?: "bottom" };
   rect: DOMRect | null;
   onNext: () => void;
   onSkip: () => void;
@@ -822,50 +826,105 @@ function TourOverlay({
         <div style={{ position: "absolute", inset: 0, background: "rgba(10,12,20,0.78)" }} />
       )}
 
-      <div
-        style={{
-          position: rect ? "absolute" : "fixed",
-          top: tooltipTop,
-          left: tooltipLeft,
-          transform: rect ? undefined : "translate(-50%, -50%)",
-          width: cardWidth,
-          background: "#262E44",
-          border: "1px solid rgba(154,166,190,0.3)",
-          borderRadius: 12,
-          padding: 20,
-          boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
-          color: "#E9E5D8",
-        }}
-      >
-        <div style={{ fontSize: 11, color: "#9AA6BE", marginBottom: 8 }}>
-          Step {step + 1} of {totalSteps}
+      {stepInfo.dock === "bottom" ? (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 16,
+            left: 16,
+            right: 16,
+            maxWidth: 900,
+            margin: "0 auto",
+            background: "#262E44",
+            border: "1px solid rgba(154,166,190,0.3)",
+            borderRadius: 12,
+            padding: "14px 20px",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
+            color: "#E9E5D8",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 20,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 11, color: "#9AA6BE", marginBottom: 3 }}>
+              Step {step + 1} of {totalSteps} · {stepInfo.title}
+            </div>
+            <div style={{ fontSize: 13, color: "#C4CADA", lineHeight: 1.5 }}>{stepInfo.body}</div>
+          </div>
+          <div style={{ display: "flex", gap: 14, alignItems: "center", flexShrink: 0 }}>
+            <button
+              onClick={onSkip}
+              style={{ background: "none", border: "none", color: "#9AA6BE", fontSize: 12, cursor: "pointer" }}
+            >
+              Skip tour
+            </button>
+            <button
+              onClick={onNext}
+              style={{
+                background: "#B33A3A",
+                color: "#E9E5D8",
+                border: "none",
+                borderRadius: 8,
+                padding: "9px 18px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {isLast ? "Get started" : "Next"}
+            </button>
+          </div>
         </div>
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{stepInfo.title}</div>
-        <div style={{ fontSize: 13, color: "#C4CADA", lineHeight: 1.6, marginBottom: 16 }}>{stepInfo.body}</div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <button
-            onClick={onSkip}
-            style={{ background: "none", border: "none", color: "#9AA6BE", fontSize: 12, cursor: "pointer" }}
-          >
-            Skip tour
-          </button>
-          <button
-            onClick={onNext}
-            style={{
-              background: "#B33A3A",
-              color: "#E9E5D8",
-              border: "none",
-              borderRadius: 8,
-              padding: "9px 18px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {isLast ? "Get started" : "Next"}
-          </button>
+      ) : (
+        <div
+          style={{
+            position: rect ? "absolute" : "fixed",
+            top: tooltipTop,
+            left: tooltipLeft,
+            transform: rect ? undefined : "translate(-50%, -50%)",
+            width: cardWidth,
+            background: "#262E44",
+            border: "1px solid rgba(154,166,190,0.3)",
+            borderRadius: 12,
+            padding: 20,
+            boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
+            color: "#E9E5D8",
+          }}
+        >
+          <div style={{ fontSize: 11, color: "#9AA6BE", marginBottom: 8 }}>
+            Step {step + 1} of {totalSteps}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{stepInfo.title}</div>
+          <div style={{ fontSize: 13, color: "#C4CADA", lineHeight: 1.6, marginBottom: 16 }}>{stepInfo.body}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button
+              onClick={onSkip}
+              style={{ background: "none", border: "none", color: "#9AA6BE", fontSize: 12, cursor: "pointer" }}
+            >
+              Skip tour
+            </button>
+            <button
+              onClick={onNext}
+              style={{
+                background: "#B33A3A",
+                color: "#E9E5D8",
+                border: "none",
+                borderRadius: 8,
+                padding: "9px 18px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {isLast ? "Get started" : "Next"}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
