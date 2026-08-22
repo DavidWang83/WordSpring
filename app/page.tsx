@@ -9,6 +9,7 @@ import type { User } from "@supabase/supabase-js";
 
 type LetterVersion = { tone: string; subject: string; body: string; translation?: string };
 type Signature = { id: string; name: string; text: string };
+type Recipient = { id: string; name: string };
 
 const TOUR_SEEN_KEY = "wordspring_tour_seen";
 
@@ -65,6 +66,13 @@ export default function Home() {
   const [newSigName, setNewSigName] = useState("");
   const [newSigText, setNewSigText] = useState("");
 
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
+  const [showRecipientForm, setShowRecipientForm] = useState(false);
+  const [editingRecipientId, setEditingRecipientId] = useState<string | null>(null);
+  const [newRecipientName, setNewRecipientName] = useState("");
+  const [genSigId, setGenSigId] = useState<string>("");
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -74,6 +82,7 @@ export default function Home() {
   const langRowRef = useRef<HTMLDivElement>(null);
   const micBtnRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recipientSigRef = useRef<HTMLDivElement>(null);
   const generateBtnRef = useRef<HTMLButtonElement>(null);
   const resultsPanelRef = useRef<HTMLDivElement>(null);
   const copyRowRef = useRef<HTMLDivElement>(null);
@@ -90,11 +99,12 @@ export default function Home() {
     { ref: langRowRef, title: "1. Pick your languages", body: "Choose the language you'll speak in, and the language your email should come out in — they don't have to match." },
     { ref: micBtnRef, title: "2. Press record", body: "Tap the mic and just talk — say what you want the email to communicate, in your own words. No need to sound formal." },
     { ref: textareaRef, title: "3. Review what was heard", body: "Your words are transcribed here automatically. You can edit the text directly before generating — nothing is final yet." },
-    { ref: generateBtnRef, title: "4. Generate three tones", body: "Get three ready-to-send drafts — from warm and courteous to short and direct — generated in seconds." },
-    { ref: resultsPanelRef, title: "5. Pick a tone", body: "You can copy any version's subject and body straight away, or tap the checkmark on your favorite to open it in the editor below and keep refining it.", dock: "center" },
-    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it.", dock: "center" },
-    { ref: copyRowRef, title: "7. Copy subject & body", body: "Copy the subject and body separately, ready to paste into any email app — this also works well on mobile, where copying happens in two steps." },
-    { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, generate, pick a tone, edit, and copy. Try it for real now." },
+    { ref: recipientSigRef, title: "4. Add recipients & a signature (optional)", body: "Tap to select who you're writing to — pick more than one and the numbers show the order they'll be greeted in. Pick a saved signature to sign off with. The AI uses these exactly as written, without translating them, even if the email itself is in another language.", dock: "center" },
+    { ref: generateBtnRef, title: "5. Generate three tones", body: "Get three ready-to-send drafts — from warm and courteous to short and direct — generated in seconds." },
+    { ref: resultsPanelRef, title: "6. Pick a tone", body: "You can copy any version's subject and body straight away, or tap the checkmark on your favorite to open it in the editor below and keep refining it.", dock: "center" },
+    { ref: composerAnchorRef, title: "7. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it.", dock: "center" },
+    { ref: copyRowRef, title: "8. Copy subject & body", body: "Copy the subject and body separately, ready to paste into any email app — this also works well on mobile, where copying happens in two steps." },
+    { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, add recipients/signature, generate, pick a tone, edit, and copy. Try it for real now." },
   ];
 
   function runTourTypingAnimation() {
@@ -128,15 +138,15 @@ export default function Home() {
       // Leaving the "press record" step: turn the mic visual off and simulate the transcription arriving
       setRecording(false);
       runTourTypingAnimation();
-    } else if (next === 3) {
+    } else if (next === 4) {
       // Make sure the full transcript is in place before pointing at the Generate button
       if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
       setTranscript(TOUR_MOCK_TRANSCRIPT);
-    } else if (next === 4) {
+    } else if (next === 5) {
       // Skip the fake "Generating…" delay — jump straight to the results so the
       // tour keeps moving smoothly instead of pausing on a spinner.
       setVersions(TOUR_MOCK_VERSIONS);
-    } else if (next === 5) {
+    } else if (next === 6) {
       // Simulate picking the "Neutral & Professional" version and opening the editor
       setChosenIdx(1);
       setComposerSubject(TOUR_MOCK_VERSIONS[1].subject);
@@ -230,7 +240,7 @@ export default function Home() {
   async function loadUserData(userId: string) {
     const { data, error } = await supabase
       .from("user_data")
-      .select("signatures, font_family, font_size_pt")
+      .select("signatures, recipients, font_family, font_size_pt")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -240,12 +250,15 @@ export default function Home() {
     }
     if (data) {
       if (data.signatures) setSignatures(data.signatures);
+      if (data.recipients) setRecipients(data.recipients);
       if (data.font_family) setFontFamily(data.font_family);
       if (data.font_size_pt) setFontSizePt(data.font_size_pt);
     }
   }
 
-  async function saveUserData(fields: Partial<{ signatures: Signature[]; font_family: string; font_size_pt: number }>) {
+  async function saveUserData(
+    fields: Partial<{ signatures: Signature[]; recipients: Recipient[]; font_family: string; font_size_pt: number }>
+  ) {
     if (!user) return;
     const { error } = await supabase
       .from("user_data")
@@ -271,6 +284,52 @@ export default function Home() {
   function persistSignatures(sigs: Signature[]) {
     setSignatures(sigs);
     saveUserData({ signatures: sigs });
+  }
+
+  function persistRecipients(list: Recipient[]) {
+    setRecipients(list);
+    saveUserData({ recipients: list });
+  }
+
+  function saveNewRecipient() {
+    if (!newRecipientName.trim()) return;
+    if (editingRecipientId) {
+      const updated = recipients.map((r) =>
+        r.id === editingRecipientId ? { ...r, name: newRecipientName.trim() } : r
+      );
+      persistRecipients(updated);
+      setEditingRecipientId(null);
+    } else {
+      const r: Recipient = { id: Date.now().toString(), name: newRecipientName.trim() };
+      persistRecipients([...recipients, r]);
+    }
+    setNewRecipientName("");
+    setShowRecipientForm(false);
+  }
+
+  function startEditRecipient(r: Recipient) {
+    setEditingRecipientId(r.id);
+    setNewRecipientName(r.name);
+    setShowRecipientForm(true);
+  }
+
+  function cancelEditRecipient() {
+    setEditingRecipientId(null);
+    setNewRecipientName("");
+  }
+
+  function deleteRecipient(id: string) {
+    persistRecipients(recipients.filter((r) => r.id !== id));
+    setSelectedRecipientIds((prev) => prev.filter((rid) => rid !== id));
+    if (editingRecipientId === id) cancelEditRecipient();
+  }
+
+  // Toggling keeps track of the order recipients were picked in, so the numbered
+  // badges (1, 2, 3…) reflect selection order, not list order.
+  function toggleRecipient(id: string) {
+    setSelectedRecipientIds((prev) =>
+      prev.includes(id) ? prev.filter((rid) => rid !== id) : [...prev, id]
+    );
   }
 
   async function startRecording() {
@@ -355,13 +414,18 @@ export default function Home() {
         return;
       }
 
+      const recipientNames = selectedRecipientIds
+        .map((id) => recipients.find((r) => r.id === id)?.name)
+        .filter((n): n is string => !!n);
+      const signatureText = signatures.find((s) => s.id === genSigId)?.text || null;
+
       const res = await fetch("/api/generate-email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ content: transcript, outLang, sttLang }),
+        body: JSON.stringify({ content: transcript, outLang, sttLang, recipientNames, signatureText }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Generation failed");
@@ -579,6 +643,94 @@ export default function Home() {
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="Your dictated content will appear here. You can also type directly, or paste in a related email thread for context."
           />
+
+          <div style={styles.recipientSigRow} ref={recipientSigRef}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={styles.label}>Send to (optional)</label>
+              <div style={styles.recipientChips}>
+                {recipients.length === 0 && (
+                  <span style={{ fontSize: 12, color: "#7C8BA3" }}>No saved recipients yet</span>
+                )}
+                {recipients.map((r) => {
+                  const order = selectedRecipientIds.indexOf(r.id);
+                  const selected = order !== -1;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => toggleRecipient(r.id)}
+                      style={{
+                        ...styles.recipientChip,
+                        borderColor: selected ? "#B33A3A" : "rgba(154,166,190,0.3)",
+                        background: selected ? "rgba(179,58,58,0.15)" : "transparent",
+                      }}
+                    >
+                      {selected && <span style={styles.recipientBadge}>{order + 1}</span>}
+                      {r.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                style={{ ...styles.darkBtnSmall, marginTop: 8 }}
+                onClick={() => setShowRecipientForm(!showRecipientForm)}
+              >
+                Manage recipients
+              </button>
+              {showRecipientForm && (
+                <div style={styles.sigForm}>
+                  {editingRecipientId && (
+                    <div style={{ fontSize: 12, color: "#E9A5A5", marginBottom: 8 }}>Editing recipient</div>
+                  )}
+                  <input
+                    style={styles.select}
+                    placeholder="Recipient name (e.g. Sarah, or ABC Corp team)"
+                    value={newRecipientName}
+                    onChange={(e) => setNewRecipientName(e.target.value)}
+                  />
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button style={{ ...styles.generateBtn, marginTop: 0, flex: 1 }} onClick={saveNewRecipient}>
+                      {editingRecipientId ? "Update recipient" : "Save recipient"}
+                    </button>
+                    {editingRecipientId && (
+                      <button style={styles.darkBtnSmall} onClick={cancelEditRecipient}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                  {recipients.length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      {recipients.map((r) => (
+                        <div key={r.id} style={styles.sigListItem}>
+                          <span>{r.name}</span>
+                          <span style={{ display: "flex", gap: 8 }}>
+                            <button style={styles.darkBtnSmall} onClick={() => startEditRecipient(r)}>Edit</button>
+                            <button style={styles.deleteBtn} onClick={() => deleteRecipient(r.id)}>Delete</button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={styles.label}>Sign as (optional)</label>
+              <select style={styles.select} value={genSigId} onChange={(e) => setGenSigId(e.target.value)}>
+                <option value="">— No signature —</option>
+                {signatures.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 12, color: "#7C8BA3", marginTop: 8 }}>
+                {signatures.length === 0
+                  ? "Add a signature below in the editor's signature manager, then it'll show up here too."
+                  : "The generated email will end with this signature instead of a generic placeholder."}
+              </div>
+            </div>
+          </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
             <button
@@ -978,4 +1130,8 @@ const styles: Record<string, React.CSSProperties> = {
   sigForm: { marginTop: 14, padding: 16, background: "#1C2333", borderRadius: 10 },
   sigListItem: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", color: "#E9E5D8", fontSize: 13, borderBottom: "1px solid rgba(154,166,190,0.15)" },
   deleteBtn: { background: "none", border: "1px solid #B33A3A", color: "#B33A3A", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer" },
+  recipientSigRow: { display: "flex", gap: 20, flexWrap: "wrap", marginTop: 18, padding: 16, background: "rgba(154,166,190,0.06)", border: "1px solid rgba(154,166,190,0.2)", borderRadius: 10 },
+  recipientChips: { display: "flex", flexWrap: "wrap", gap: 8, minHeight: 30, alignItems: "center" },
+  recipientChip: { display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(154,166,190,0.3)", borderRadius: 20, padding: "6px 12px", fontSize: 12, color: "#E9E5D8", cursor: "pointer" },
+  recipientBadge: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", background: "#B33A3A", color: "#E9E5D8", fontSize: 10, fontWeight: 700 },
 };

@@ -4,10 +4,15 @@
 create table if not exists user_data (
   user_id uuid references auth.users(id) on delete cascade primary key,
   signatures jsonb default '[]'::jsonb,
+  recipients jsonb default '[]'::jsonb,
   font_family text default 'Arial, sans-serif',
   font_size_pt int default 14,
   updated_at timestamptz default now()
 );
+
+-- 如果你的 user_data 表已經存在（第一次設定時已經跑過上面的 create table），
+-- 上面的 create table 指令會被跳過，這時候要單獨補上新的 recipients 欄位：
+alter table user_data add column if not exists recipients jsonb default '[]'::jsonb;
 
 -- 開啟 Row Level Security（列級安全性）：
 -- 這一步是關鍵，沒有它的話，任何登入的使用者理論上都能讀到別人的資料。

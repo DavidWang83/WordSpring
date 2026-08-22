@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please sign in first" }, { status: 401 });
     }
 
-    const { content, outLang, sttLang } = await req.json();
+    const { content, outLang, sttLang, recipientNames, signatureText } = await req.json();
 
     if (!content || typeof content !== "string" || !content.trim()) {
       return NextResponse.json({ error: "Missing dictated content" }, { status: 400 });
@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
     const outLangName = getPromptLabel(outLang);
     const spokenLangName = sttLang ? getPromptLabel(sttLang) : null;
     const needsTranslation = spokenLangName && spokenLangName !== outLangName;
+
+    const hasRecipients = Array.isArray(recipientNames) && recipientNames.length > 0;
+    const hasSignature = typeof signatureText === "string" && signatureText.trim().length > 0;
 
     const prompt = `You are a professional business correspondence writing assistant.
 
@@ -45,6 +48,21 @@ ${
 
 IMPORTANT: Both the "subject" and "body" fields must be written ENTIRELY in ${outLangName} — do not leave any word, phrase, or the whole subject line in ${spokenLangName || "the original dictated language"}.${
   needsTranslation ? ` The ONLY field that should be in ${spokenLangName} is "translation".` : ""
+}
+
+${
+  hasRecipients
+    ? `Address the email to the following recipient(s), in this exact order: ${recipientNames.join(", ")}. Use these name(s) exactly as given in the greeting (e.g. "Hi ${recipientNames[0]}," or, for multiple recipients, list them naturally, e.g. "Hi ${recipientNames.join(" and ")},"). Do NOT translate, transliterate, or alter these names, even though the rest of the email is in ${outLangName} — keep them exactly as provided, in their original script/language.`
+    : `The user did not specify a recipient name. Use a natural, generic placeholder appropriate for ${outLangName} business correspondence (e.g. something like "[Recipient Name]"), unless a real recipient name is already evident from the dictated content itself.`
+}
+
+${
+  hasSignature
+    ? `End the email with EXACTLY this sign-off, used as-is for the closing/signature block of every version (do not translate it, do not alter its wording, even though the rest of the email is in ${outLangName} — keep it verbatim, in its original language):
+"""
+${signatureText}
+"""`
+    : `The user did not provide a saved signature. End the email with a natural, generic closing appropriate for ${outLangName} business correspondence (e.g. something like "Best regards, [Your Name]").`
 }
 
 Return ONLY valid JSON, no preamble, no markdown code fences, in this exact shape:
