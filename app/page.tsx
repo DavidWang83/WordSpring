@@ -61,6 +61,7 @@ export default function Home() {
   const [signatures, setSignatures] = useState<Signature[]>([]);
   const [selectedSigId, setSelectedSigId] = useState<string>("");
   const [showSigForm, setShowSigForm] = useState(false);
+  const [editingSigId, setEditingSigId] = useState<string | null>(null);
   const [newSigName, setNewSigName] = useState("");
   const [newSigText, setNewSigText] = useState("");
 
@@ -82,7 +83,7 @@ export default function Home() {
     ref: React.RefObject<HTMLElement> | null;
     title: string;
     body: string;
-    dock?: "corner";
+    dock?: "center";
   };
 
   const TOUR_STEPS: TourStepDef[] = [
@@ -90,8 +91,8 @@ export default function Home() {
     { ref: micBtnRef, title: "2. Press record", body: "Tap the mic and just talk — say what you want the email to communicate, in your own words. No need to sound formal." },
     { ref: textareaRef, title: "3. Review what was heard", body: "Your words are transcribed here automatically. You can edit the text directly before generating — nothing is final yet." },
     { ref: generateBtnRef, title: "4. Generate three tones", body: "Get three ready-to-send drafts — from warm and courteous to short and direct — generated in seconds." },
-    { ref: resultsPanelRef, title: "5. Pick a tone", body: "You can copy any version's subject and body straight away, or tap the checkmark on your favorite to open it in the editor below and keep refining it.", dock: "corner" },
-    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it.", dock: "corner" },
+    { ref: resultsPanelRef, title: "5. Pick a tone", body: "You can copy any version's subject and body straight away, or tap the checkmark on your favorite to open it in the editor below and keep refining it.", dock: "center" },
+    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it.", dock: "center" },
     { ref: copyRowRef, title: "7. Copy subject & body", body: "Copy the subject and body separately, ready to paste into any email app — this also works well on mobile, where copying happens in two steps." },
     { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, generate, pick a tone, edit, and copy. Try it for real now." },
   ];
@@ -430,17 +431,39 @@ export default function Home() {
 
   function saveNewSignature() {
     if (!newSigName.trim() || !newSigText.trim()) return;
-    const sig: Signature = { id: Date.now().toString(), name: newSigName.trim(), text: newSigText.trim() };
-    persistSignatures([...signatures, sig]);
+    if (editingSigId) {
+      const updated = signatures.map((s) =>
+        s.id === editingSigId ? { ...s, name: newSigName.trim(), text: newSigText.trim() } : s
+      );
+      persistSignatures(updated);
+      setEditingSigId(null);
+    } else {
+      const sig: Signature = { id: Date.now().toString(), name: newSigName.trim(), text: newSigText.trim() };
+      persistSignatures([...signatures, sig]);
+      setSelectedSigId(sig.id);
+    }
     setNewSigName("");
     setNewSigText("");
     setShowSigForm(false);
-    setSelectedSigId(sig.id);
+  }
+
+  function startEditSignature(s: Signature) {
+    setEditingSigId(s.id);
+    setNewSigName(s.name);
+    setNewSigText(s.text);
+    setShowSigForm(true);
+  }
+
+  function cancelEditSignature() {
+    setEditingSigId(null);
+    setNewSigName("");
+    setNewSigText("");
   }
 
   function deleteSignature(id: string) {
     persistSignatures(signatures.filter((s) => s.id !== id));
     if (selectedSigId === id) setSelectedSigId("");
+    if (editingSigId === id) cancelEditSignature();
   }
 
   async function copyComposerBody() {
@@ -706,6 +729,9 @@ export default function Home() {
 
             {showSigForm && (
               <div style={styles.sigForm}>
+                {editingSigId && (
+                  <div style={{ fontSize: 12, color: "#E9A5A5", marginBottom: 8 }}>Editing "{newSigName || "signature"}"</div>
+                )}
                 <input
                   style={styles.select}
                   placeholder="Signature name (e.g. Work)"
@@ -718,15 +744,25 @@ export default function Home() {
                   value={newSigText}
                   onChange={(e) => setNewSigText(e.target.value)}
                 />
-                <button style={{ ...styles.generateBtn, marginTop: 8 }} onClick={saveNewSignature}>
-                  Save signature
-                </button>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button style={{ ...styles.generateBtn, marginTop: 0, flex: 1 }} onClick={saveNewSignature}>
+                    {editingSigId ? "Update signature" : "Save signature"}
+                  </button>
+                  {editingSigId && (
+                    <button style={styles.darkBtnSmall} onClick={cancelEditSignature}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
                 {signatures.length > 0 && (
                   <div style={{ marginTop: 12 }}>
                     {signatures.map((s) => (
                       <div key={s.id} style={styles.sigListItem}>
                         <span>{s.name}</span>
-                        <button style={styles.deleteBtn} onClick={() => deleteSignature(s.id)}>Delete</button>
+                        <span style={{ display: "flex", gap: 8 }}>
+                          <button style={styles.darkBtnSmall} onClick={() => startEditSignature(s)}>Edit</button>
+                          <button style={styles.deleteBtn} onClick={() => deleteSignature(s.id)}>Delete</button>
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -776,7 +812,7 @@ function TourOverlay({
 }: {
   step: number;
   totalSteps: number;
-  stepInfo: { title: string; body: string; dock?: "corner" };
+  stepInfo: { title: string; body: string; dock?: "center" };
   rect: DOMRect | null;
   onNext: () => void;
   onSkip: () => void;
@@ -787,6 +823,7 @@ function TourOverlay({
   const cardWidth = 320;
   const viewportH = typeof window !== "undefined" ? window.innerHeight : 800;
   const viewportW = typeof window !== "undefined" ? window.innerWidth : 400;
+  const isCentered = !rect || stepInfo.dock === "center";
 
   // Everything here is positioned inside a `position: fixed` full-viewport layer,
   // so all coordinates must stay viewport-relative — never mix in window.scrollY/X,
@@ -794,20 +831,10 @@ function TourOverlay({
   // happens on every step, since each step auto-scrolls its target into view).
   let tooltipTop: number | string = "50%";
   let tooltipLeft: number | string = "50%";
-  if (rect) {
-    if (stepInfo.dock === "corner") {
-      // Sit inside the highlighted box's top-right corner, over empty space,
-      // instead of covering the actual content below it.
-      tooltipTop = rect.top + 14;
-      tooltipLeft = rect.right - cardWidth - 14;
-    } else {
-      const spaceBelow = viewportH - rect.bottom;
-      tooltipTop =
-        spaceBelow > cardHeight + pad + 14
-          ? rect.bottom + pad + 14
-          : rect.top - cardHeight - 14;
-      tooltipLeft = rect.left;
-    }
+  if (rect && !isCentered) {
+    const spaceBelow = viewportH - rect.bottom;
+    tooltipTop = spaceBelow > cardHeight + pad + 14 ? rect.bottom + pad + 14 : rect.top - cardHeight - 14;
+    tooltipLeft = rect.left;
     // Always keep the card fully on-screen, even if the target sits right at an edge
     tooltipTop = Math.min(Math.max(tooltipTop, 16), viewportH - cardHeight - 16);
     tooltipLeft = Math.min(Math.max(tooltipLeft as number, 16), viewportW - cardWidth - 16);
@@ -836,10 +863,10 @@ function TourOverlay({
 
       <div
         style={{
-          position: rect ? "absolute" : "fixed",
-          top: tooltipTop,
-          left: tooltipLeft,
-          transform: rect ? undefined : "translate(-50%, -50%)",
+          position: isCentered ? "fixed" : "absolute",
+          top: isCentered ? "50%" : tooltipTop,
+          left: isCentered ? "50%" : tooltipLeft,
+          transform: isCentered ? "translate(-50%, -50%)" : undefined,
           width: cardWidth,
           background: "#262E44",
           border: "1px solid rgba(154,166,190,0.3)",
