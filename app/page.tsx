@@ -82,7 +82,7 @@ export default function Home() {
     ref: React.RefObject<HTMLElement> | null;
     title: string;
     body: string;
-    dock?: "bottom";
+    dock?: "corner";
   };
 
   const TOUR_STEPS: TourStepDef[] = [
@@ -90,8 +90,8 @@ export default function Home() {
     { ref: micBtnRef, title: "2. Press record", body: "Tap the mic and just talk — say what you want the email to communicate, in your own words. No need to sound formal." },
     { ref: textareaRef, title: "3. Review what was heard", body: "Your words are transcribed here automatically. You can edit the text directly before generating — nothing is final yet." },
     { ref: generateBtnRef, title: "4. Generate three tones", body: "Get three ready-to-send drafts — from warm and courteous to short and direct — generated in seconds." },
-    { ref: resultsPanelRef, title: "5. Pick a tone", body: "Preview each version, then tap the checkmark on the one you like to open it in the editor below.", dock: "bottom" },
-    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it.", dock: "bottom" },
+    { ref: resultsPanelRef, title: "5. Pick a tone", body: "You can copy any version's subject and body straight away, or tap the checkmark on your favorite to open it in the editor below and keep refining it.", dock: "corner" },
+    { ref: composerAnchorRef, title: "6. Edit your email", body: "The version you picked is already filled in here. Adjust the font, size, bold/italic/underline/color, or insert a saved signature before you send it.", dock: "corner" },
     { ref: copyRowRef, title: "7. Copy subject & body", body: "Copy the subject and body separately, ready to paste into any email app — this also works well on mobile, where copying happens in two steps." },
     { ref: null, title: "You're all set!", body: "That's the whole flow: record, review, generate, pick a tone, edit, and copy. Try it for real now." },
   ];
@@ -497,8 +497,8 @@ export default function Home() {
           <div style={{ textAlign: "right" }}>
             <div style={{ color: "#9AA6BE", fontSize: 13, marginBottom: 6 }}>{user?.email}</div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button style={styles.copyBtnSmall} onClick={startTour}>❔ How it works</button>
-              <button style={styles.copyBtnSmall} onClick={handleSignOut}>Sign out</button>
+              <button style={styles.darkBtnSmall} onClick={startTour}>❔ How it works</button>
+              <button style={styles.darkBtnSmall} onClick={handleSignOut}>Sign out</button>
             </div>
           </div>
         </header>
@@ -696,10 +696,10 @@ export default function Home() {
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <button style={styles.copyBtnSmall} onClick={insertSignature} disabled={!selectedSigId}>
+              <button style={styles.darkBtnSmall} onClick={insertSignature} disabled={!selectedSigId}>
                 Insert
               </button>
-              <button style={styles.copyBtnSmall} onClick={() => setShowSigForm(!showSigForm)}>
+              <button style={styles.darkBtnSmall} onClick={() => setShowSigForm(!showSigForm)}>
                 Manage signatures
               </button>
             </div>
@@ -776,7 +776,7 @@ function TourOverlay({
 }: {
   step: number;
   totalSteps: number;
-  stepInfo: { title: string; body: string; dock?: "bottom" };
+  stepInfo: { title: string; body: string; dock?: "corner" };
   rect: DOMRect | null;
   onNext: () => void;
   onSkip: () => void;
@@ -795,14 +795,22 @@ function TourOverlay({
   let tooltipTop: number | string = "50%";
   let tooltipLeft: number | string = "50%";
   if (rect) {
-    const spaceBelow = viewportH - rect.bottom;
-    tooltipTop =
-      spaceBelow > cardHeight + pad + 14
-        ? rect.bottom + pad + 14
-        : rect.top - cardHeight - 14;
+    if (stepInfo.dock === "corner") {
+      // Sit inside the highlighted box's top-right corner, over empty space,
+      // instead of covering the actual content below it.
+      tooltipTop = rect.top + 14;
+      tooltipLeft = rect.right - cardWidth - 14;
+    } else {
+      const spaceBelow = viewportH - rect.bottom;
+      tooltipTop =
+        spaceBelow > cardHeight + pad + 14
+          ? rect.bottom + pad + 14
+          : rect.top - cardHeight - 14;
+      tooltipLeft = rect.left;
+    }
     // Always keep the card fully on-screen, even if the target sits right at an edge
     tooltipTop = Math.min(Math.max(tooltipTop, 16), viewportH - cardHeight - 16);
-    tooltipLeft = Math.min(Math.max(rect.left, 16), viewportW - cardWidth - 16);
+    tooltipLeft = Math.min(Math.max(tooltipLeft as number, 16), viewportW - cardWidth - 16);
   }
 
   return (
@@ -826,105 +834,50 @@ function TourOverlay({
         <div style={{ position: "absolute", inset: 0, background: "rgba(10,12,20,0.78)" }} />
       )}
 
-      {stepInfo.dock === "bottom" ? (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 16,
-            left: 16,
-            right: 16,
-            maxWidth: 900,
-            margin: "0 auto",
-            background: "#262E44",
-            border: "1px solid rgba(154,166,190,0.3)",
-            borderRadius: 12,
-            padding: "14px 20px",
-            boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
-            color: "#E9E5D8",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 20,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 11, color: "#9AA6BE", marginBottom: 3 }}>
-              Step {step + 1} of {totalSteps} · {stepInfo.title}
-            </div>
-            <div style={{ fontSize: 13, color: "#C4CADA", lineHeight: 1.5 }}>{stepInfo.body}</div>
-          </div>
-          <div style={{ display: "flex", gap: 14, alignItems: "center", flexShrink: 0 }}>
-            <button
-              onClick={onSkip}
-              style={{ background: "none", border: "none", color: "#9AA6BE", fontSize: 12, cursor: "pointer" }}
-            >
-              Skip tour
-            </button>
-            <button
-              onClick={onNext}
-              style={{
-                background: "#B33A3A",
-                color: "#E9E5D8",
-                border: "none",
-                borderRadius: 8,
-                padding: "9px 18px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {isLast ? "Get started" : "Next"}
-            </button>
-          </div>
+      <div
+        style={{
+          position: rect ? "absolute" : "fixed",
+          top: tooltipTop,
+          left: tooltipLeft,
+          transform: rect ? undefined : "translate(-50%, -50%)",
+          width: cardWidth,
+          background: "#262E44",
+          border: "1px solid rgba(154,166,190,0.3)",
+          borderRadius: 12,
+          padding: 20,
+          boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
+          color: "#E9E5D8",
+        }}
+      >
+        <div style={{ fontSize: 11, color: "#9AA6BE", marginBottom: 8 }}>
+          Step {step + 1} of {totalSteps}
         </div>
-      ) : (
-        <div
-          style={{
-            position: rect ? "absolute" : "fixed",
-            top: tooltipTop,
-            left: tooltipLeft,
-            transform: rect ? undefined : "translate(-50%, -50%)",
-            width: cardWidth,
-            background: "#262E44",
-            border: "1px solid rgba(154,166,190,0.3)",
-            borderRadius: 12,
-            padding: 20,
-            boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
-            color: "#E9E5D8",
-          }}
-        >
-          <div style={{ fontSize: 11, color: "#9AA6BE", marginBottom: 8 }}>
-            Step {step + 1} of {totalSteps}
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{stepInfo.title}</div>
-          <div style={{ fontSize: 13, color: "#C4CADA", lineHeight: 1.6, marginBottom: 16 }}>{stepInfo.body}</div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <button
-              onClick={onSkip}
-              style={{ background: "none", border: "none", color: "#9AA6BE", fontSize: 12, cursor: "pointer" }}
-            >
-              Skip tour
-            </button>
-            <button
-              onClick={onNext}
-              style={{
-                background: "#B33A3A",
-                color: "#E9E5D8",
-                border: "none",
-                borderRadius: 8,
-                padding: "9px 18px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {isLast ? "Get started" : "Next"}
-            </button>
-          </div>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{stepInfo.title}</div>
+        <div style={{ fontSize: 13, color: "#C4CADA", lineHeight: 1.6, marginBottom: 16 }}>{stepInfo.body}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button
+            onClick={onSkip}
+            style={{ background: "none", border: "none", color: "#9AA6BE", fontSize: 12, cursor: "pointer" }}
+          >
+            Skip tour
+          </button>
+          <button
+            onClick={onNext}
+            style={{
+              background: "#B33A3A",
+              color: "#E9E5D8",
+              border: "none",
+              borderRadius: 8,
+              padding: "9px 18px",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {isLast ? "Get started" : "Next"}
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -961,6 +914,7 @@ const styles: Record<string, React.CSSProperties> = {
   cardActions: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18, paddingTop: 14, borderTop: "1px solid #DED6C1", flexWrap: "wrap", gap: 10 },
   copyBtn: { background: "none", border: "1px solid #2A2620", color: "#2A2620", borderRadius: 6, padding: "7px 14px", fontSize: 12, cursor: "pointer" },
   copyBtnSmall: { background: "none", border: "1px solid #2A2620", color: "#2A2620", borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer" },
+  darkBtnSmall: { background: "none", border: "1px solid rgba(233,229,216,0.5)", color: "#E9E5D8", borderRadius: 6, padding: "6px 10px", fontSize: 11, cursor: "pointer" },
   sealStamp: { width: 40, height: 40, borderRadius: "50%", border: "2px solid #B33A3A", cursor: "pointer", fontWeight: 700, fontSize: 15, flexShrink: 0 },
   toolbar: { display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" },
   toolbarGroup: { background: "rgba(154,166,190,0.08)", border: "1px solid rgba(154,166,190,0.25)", borderRadius: 8, padding: "10px 12px", marginBottom: 8 },
