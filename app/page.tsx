@@ -331,6 +331,11 @@ export default function Home() {
     }
   }
 
+  function clearTranscript() {
+    setTranscript("");
+    setError("");
+  }
+
   async function handleGenerate() {
     if (!transcript.trim()) {
       setError("Please dictate or type the content you'd like to say first.");
@@ -575,9 +580,25 @@ export default function Home() {
             placeholder="Your dictated content will appear here. You can also type directly, or paste in a related email thread for context."
           />
 
-          <button ref={generateBtnRef} style={styles.generateBtn} onClick={handleGenerate} disabled={generating}>
-            {generating ? "Generating…" : "Generate three tone options"}
-          </button>
+          <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+            <button
+              type="button"
+              onClick={clearTranscript}
+              disabled={!transcript}
+              title="Clear the text box"
+              style={{ ...styles.clearTranscriptBtn, opacity: transcript ? 1 : 0.4, cursor: transcript ? "pointer" : "not-allowed" }}
+            >
+              ✕
+            </button>
+            <button
+              ref={generateBtnRef}
+              style={{ ...styles.generateBtn, marginTop: 0, flex: 1 }}
+              onClick={handleGenerate}
+              disabled={generating}
+            >
+              {generating ? "Generating…" : "Generate three tone options"}
+            </button>
+          </div>
 
           {error && <div style={styles.errorBox}>{error}</div>}
         </div>
@@ -928,6 +949,7 @@ const styles: Record<string, React.CSSProperties> = {
   notice: { fontSize: 13, color: "#9AA6BE", marginTop: 8, lineHeight: 1.6 },
   textarea: { width: "100%", minHeight: 120, background: "#F5F1E6", color: "#2A2620", border: "1px solid #DED6C1", borderRadius: 10, padding: 16, fontSize: 15, lineHeight: 1.8, marginTop: 18 },
   generateBtn: { marginTop: 18, width: "100%", background: "#B33A3A", color: "#E9E5D8", border: "none", borderRadius: 10, padding: 15, fontSize: 15, fontWeight: 600, cursor: "pointer" },
+  clearTranscriptBtn: { width: 44, minWidth: 44, flexShrink: 0, background: "none", border: "1px solid rgba(233,229,216,0.4)", color: "#E9E5D8", borderRadius: 10, fontSize: 16, cursor: "pointer" },
   errorBox: { background: "rgba(179,58,58,.15)", border: "1px solid rgba(179,58,58,.4)", color: "#F1C9C9", padding: "12px 14px", borderRadius: 8, fontSize: 13, marginTop: 14 },
   results: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 },
   letterCard: { background: "#F5F1E6", color: "#2A2620", borderRadius: 10, padding: "26px 24px 22px", position: "relative", border: "1px solid #DED6C1", display: "flex", flexDirection: "column", minHeight: 280 },
