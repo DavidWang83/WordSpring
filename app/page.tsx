@@ -68,10 +68,14 @@ export default function Home() {
 
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
-  const [showRecipientForm, setShowRecipientForm] = useState(false);
   const [editingRecipientId, setEditingRecipientId] = useState<string | null>(null);
   const [newRecipientName, setNewRecipientName] = useState("");
+  const [recipientDropdownOpen, setRecipientDropdownOpen] = useState(false);
   const [genSigId, setGenSigId] = useState<string>("");
+  const [showGenSigForm, setShowGenSigForm] = useState(false);
+  const [editingGenSigId, setEditingGenSigId] = useState<string | null>(null);
+  const [newGenSigName, setNewGenSigName] = useState("");
+  const [newGenSigText, setNewGenSigText] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -304,13 +308,11 @@ export default function Home() {
       persistRecipients([...recipients, r]);
     }
     setNewRecipientName("");
-    setShowRecipientForm(false);
   }
 
   function startEditRecipient(r: Recipient) {
     setEditingRecipientId(r.id);
     setNewRecipientName(r.name);
-    setShowRecipientForm(true);
   }
 
   function cancelEditRecipient() {
@@ -533,6 +535,43 @@ export default function Home() {
     persistSignatures(signatures.filter((s) => s.id !== id));
     if (selectedSigId === id) setSelectedSigId("");
     if (editingSigId === id) cancelEditSignature();
+    if (genSigId === id) setGenSigId("");
+    if (editingGenSigId === id) cancelEditGenSignature();
+  }
+
+  // Separate "create/edit a signature" flow for the pre-generation panel, so it
+  // doesn't share form state with the editor's own signature manager below —
+  // both can otherwise be visible on screen at the same time.
+  function saveGenSignature() {
+    if (!newGenSigName.trim() || !newGenSigText.trim()) return;
+    if (editingGenSigId) {
+      persistSignatures(
+        signatures.map((s) =>
+          s.id === editingGenSigId ? { ...s, name: newGenSigName.trim(), text: newGenSigText.trim() } : s
+        )
+      );
+      setEditingGenSigId(null);
+    } else {
+      const sig: Signature = { id: Date.now().toString(), name: newGenSigName.trim(), text: newGenSigText.trim() };
+      persistSignatures([...signatures, sig]);
+      setGenSigId(sig.id);
+    }
+    setNewGenSigName("");
+    setNewGenSigText("");
+    setShowGenSigForm(false);
+  }
+
+  function startEditGenSignature(s: Signature) {
+    setEditingGenSigId(s.id);
+    setNewGenSigName(s.name);
+    setNewGenSigText(s.text);
+    setShowGenSigForm(true);
+  }
+
+  function cancelEditGenSignature() {
+    setEditingGenSigId(null);
+    setNewGenSigName("");
+    setNewGenSigText("");
   }
 
   async function copyComposerBody() {
@@ -645,88 +684,147 @@ export default function Home() {
           />
 
           <div style={styles.recipientSigRow} ref={recipientSigRef}>
-            <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
               <label style={styles.label}>Send to (optional)</label>
-              <div style={styles.recipientChips}>
-                {recipients.length === 0 && (
-                  <span style={{ fontSize: 12, color: "#7C8BA3" }}>No saved recipients yet</span>
-                )}
-                {recipients.map((r) => {
-                  const order = selectedRecipientIds.indexOf(r.id);
-                  const selected = order !== -1;
-                  return (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => toggleRecipient(r.id)}
-                      style={{
-                        ...styles.recipientChip,
-                        borderColor: selected ? "#B33A3A" : "rgba(154,166,190,0.3)",
-                        background: selected ? "rgba(179,58,58,0.15)" : "transparent",
-                      }}
-                    >
-                      {selected && <span style={styles.recipientBadge}>{order + 1}</span>}
-                      {r.name}
-                    </button>
-                  );
-                })}
-              </div>
               <button
                 type="button"
-                style={{ ...styles.darkBtnSmall, marginTop: 8 }}
-                onClick={() => setShowRecipientForm(!showRecipientForm)}
+                style={{ ...styles.select, textAlign: "left", cursor: "pointer" }}
+                onClick={() => setRecipientDropdownOpen(!recipientDropdownOpen)}
               >
-                Manage recipients
+                {selectedRecipientIds.length === 0
+                  ? "Select recipients ▾"
+                  : selectedRecipientIds
+                      .map((id) => recipients.find((r) => r.id === id)?.name)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .join(", ") + (selectedRecipientIds.length > 2 ? ` +${selectedRecipientIds.length - 2} more ▾` : " ▾")}
               </button>
-              {showRecipientForm && (
-                <div style={styles.sigForm}>
-                  {editingRecipientId && (
-                    <div style={{ fontSize: 12, color: "#E9A5A5", marginBottom: 8 }}>Editing recipient</div>
-                  )}
-                  <input
-                    style={styles.select}
-                    placeholder="Recipient name (e.g. Sarah, or ABC Corp team)"
-                    value={newRecipientName}
-                    onChange={(e) => setNewRecipientName(e.target.value)}
-                  />
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <button style={{ ...styles.generateBtn, marginTop: 0, flex: 1 }} onClick={saveNewRecipient}>
-                      {editingRecipientId ? "Update recipient" : "Save recipient"}
-                    </button>
-                    {editingRecipientId && (
-                      <button style={styles.darkBtnSmall} onClick={cancelEditRecipient}>
-                        Cancel
-                      </button>
+
+              {recipientDropdownOpen && (
+                <div style={styles.recipientDropdownPanel}>
+                  <div style={styles.recipientDropdownList}>
+                    {recipients.length === 0 && (
+                      <div style={{ fontSize: 12, color: "#7C8BA3", padding: "6px 4px" }}>
+                        No saved recipients yet — add one below.
+                      </div>
                     )}
-                  </div>
-                  {recipients.length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      {recipients.map((r) => (
-                        <div key={r.id} style={styles.sigListItem}>
-                          <span>{r.name}</span>
-                          <span style={{ display: "flex", gap: 8 }}>
+                    {recipients.map((r) => {
+                      const order = selectedRecipientIds.indexOf(r.id);
+                      const selected = order !== -1;
+                      return (
+                        <div key={r.id} style={styles.recipientDropdownRow}>
+                          <button type="button" style={styles.recipientCheckRow} onClick={() => toggleRecipient(r.id)}>
+                            <span style={{ ...styles.recipientBadge, background: selected ? "#B33A3A" : "transparent", border: selected ? "none" : "1px solid rgba(154,166,190,0.4)" }}>
+                              {selected ? order + 1 : ""}
+                            </span>
+                            {r.name}
+                          </button>
+                          <span style={{ display: "flex", gap: 6 }}>
                             <button style={styles.darkBtnSmall} onClick={() => startEditRecipient(r)}>Edit</button>
                             <button style={styles.deleteBtn} onClick={() => deleteRecipient(r.id)}>Delete</button>
                           </span>
                         </div>
-                      ))}
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ borderTop: "1px solid rgba(154,166,190,0.2)", marginTop: 10, paddingTop: 10 }}>
+                    {editingRecipientId && (
+                      <div style={{ fontSize: 12, color: "#E9A5A5", marginBottom: 8 }}>Editing recipient</div>
+                    )}
+                    <input
+                      style={styles.select}
+                      placeholder="Add a new recipient…"
+                      value={newRecipientName}
+                      onChange={(e) => setNewRecipientName(e.target.value)}
+                    />
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <button style={{ ...styles.generateBtn, marginTop: 0, flex: 1 }} onClick={saveNewRecipient}>
+                        {editingRecipientId ? "Update recipient" : "Add recipient"}
+                      </button>
+                      {editingRecipientId && (
+                        <button style={styles.darkBtnSmall} onClick={cancelEditRecipient}>
+                          Cancel
+                        </button>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  <button
+                    type="button"
+                    style={{ ...styles.darkBtnSmall, width: "100%", marginTop: 10 }}
+                    onClick={() => setRecipientDropdownOpen(false)}
+                  >
+                    Done
+                  </button>
                 </div>
               )}
             </div>
 
             <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={styles.label}>Sign as (optional)</label>
+              <label style={styles.label}>Signatures — sign as (optional)</label>
               <select style={styles.select} value={genSigId} onChange={(e) => setGenSigId(e.target.value)}>
                 <option value="">— No signature —</option>
                 {signatures.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button
+                  type="button"
+                  style={styles.darkBtnSmall}
+                  onClick={() => {
+                    cancelEditGenSignature();
+                    setShowGenSigForm(!showGenSigForm);
+                  }}
+                >
+                  + New signature
+                </button>
+                {genSigId && !showGenSigForm && (
+                  <button
+                    type="button"
+                    style={styles.darkBtnSmall}
+                    onClick={() => {
+                      const s = signatures.find((x) => x.id === genSigId);
+                      if (s) startEditGenSignature(s);
+                    }}
+                  >
+                    Edit selected
+                  </button>
+                )}
+              </div>
+              {showGenSigForm && (
+                <div style={styles.sigForm}>
+                  {editingGenSigId && (
+                    <div style={{ fontSize: 12, color: "#E9A5A5", marginBottom: 8 }}>Editing "{newGenSigName || "signature"}"</div>
+                  )}
+                  <input
+                    style={styles.select}
+                    placeholder="Signature name (e.g. Work)"
+                    value={newGenSigName}
+                    onChange={(e) => setNewGenSigName(e.target.value)}
+                  />
+                  <textarea
+                    style={{ ...styles.textarea, minHeight: 70, marginTop: 8 }}
+                    placeholder="Signature text"
+                    value={newGenSigText}
+                    onChange={(e) => setNewGenSigText(e.target.value)}
+                  />
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button style={{ ...styles.generateBtn, marginTop: 0, flex: 1 }} onClick={saveGenSignature}>
+                      {editingGenSigId ? "Update signature" : "Save signature"}
+                    </button>
+                    {editingGenSigId && (
+                      <button style={styles.darkBtnSmall} onClick={cancelEditGenSignature}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
               <div style={{ fontSize: 12, color: "#7C8BA3", marginTop: 8 }}>
                 {signatures.length === 0
-                  ? "Add a signature below in the editor's signature manager, then it'll show up here too."
+                  ? "Create a signature above so it's ready before you even generate an email."
                   : "The generated email will end with this signature instead of a generic placeholder."}
               </div>
             </div>
@@ -740,7 +838,7 @@ export default function Home() {
               title="Clear the text box"
               style={{ ...styles.clearTranscriptBtn, opacity: transcript ? 1 : 0.4, cursor: transcript ? "pointer" : "not-allowed" }}
             >
-              ✕
+              ✕ Clear text
             </button>
             <button
               ref={generateBtnRef}
@@ -886,6 +984,7 @@ export default function Home() {
             />
 
             <div style={styles.signatureRow}>
+              <label style={{ ...styles.label, width: "100%" }}>Signatures</label>
               <select style={styles.select} value={selectedSigId} onChange={(e) => setSelectedSigId(e.target.value)}>
                 <option value="">— Select a saved signature —</option>
                 {signatures.map((s) => (
@@ -1101,7 +1200,7 @@ const styles: Record<string, React.CSSProperties> = {
   notice: { fontSize: 13, color: "#9AA6BE", marginTop: 8, lineHeight: 1.6 },
   textarea: { width: "100%", minHeight: 120, background: "#F5F1E6", color: "#2A2620", border: "1px solid #DED6C1", borderRadius: 10, padding: 16, fontSize: 15, lineHeight: 1.8, marginTop: 18 },
   generateBtn: { marginTop: 18, width: "100%", background: "#B33A3A", color: "#E9E5D8", border: "none", borderRadius: 10, padding: 15, fontSize: 15, fontWeight: 600, cursor: "pointer" },
-  clearTranscriptBtn: { width: 44, minWidth: 44, flexShrink: 0, background: "none", border: "1px solid rgba(233,229,216,0.4)", color: "#E9E5D8", borderRadius: 10, fontSize: 16, cursor: "pointer" },
+  clearTranscriptBtn: { width: 130, minWidth: 130, flexShrink: 0, background: "none", border: "1px solid rgba(233,229,216,0.4)", color: "#E9E5D8", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" },
   errorBox: { background: "rgba(179,58,58,.15)", border: "1px solid rgba(179,58,58,.4)", color: "#F1C9C9", padding: "12px 14px", borderRadius: 8, fontSize: 13, marginTop: 14 },
   results: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 },
   letterCard: { background: "#F5F1E6", color: "#2A2620", borderRadius: 10, padding: "26px 24px 22px", position: "relative", border: "1px solid #DED6C1", display: "flex", flexDirection: "column", minHeight: 280 },
@@ -1131,7 +1230,9 @@ const styles: Record<string, React.CSSProperties> = {
   sigListItem: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", color: "#E9E5D8", fontSize: 13, borderBottom: "1px solid rgba(154,166,190,0.15)" },
   deleteBtn: { background: "none", border: "1px solid #B33A3A", color: "#B33A3A", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer" },
   recipientSigRow: { display: "flex", gap: 20, flexWrap: "wrap", marginTop: 18, padding: 16, background: "rgba(154,166,190,0.06)", border: "1px solid rgba(154,166,190,0.2)", borderRadius: 10 },
-  recipientChips: { display: "flex", flexWrap: "wrap", gap: 8, minHeight: 30, alignItems: "center" },
-  recipientChip: { display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(154,166,190,0.3)", borderRadius: 20, padding: "6px 12px", fontSize: 12, color: "#E9E5D8", cursor: "pointer" },
-  recipientBadge: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", background: "#B33A3A", color: "#E9E5D8", fontSize: 10, fontWeight: 700 },
+  recipientDropdownPanel: { position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, marginTop: 6, background: "#1C2333", border: "1px solid rgba(154,166,190,0.3)", borderRadius: 10, padding: 12, boxShadow: "0 12px 24px rgba(0,0,0,0.4)" },
+  recipientDropdownList: { maxHeight: 170, overflowY: "auto" },
+  recipientDropdownRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 4px", borderBottom: "1px solid rgba(154,166,190,0.12)" },
+  recipientCheckRow: { display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", color: "#E9E5D8", fontSize: 13, cursor: "pointer", padding: 0, textAlign: "left", flex: 1 },
+  recipientBadge: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", background: "#B33A3A", color: "#E9E5D8", fontSize: 10, fontWeight: 700, flexShrink: 0 },
 };
